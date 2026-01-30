@@ -4,7 +4,6 @@ A break reminder system with tray icon for start/pause/stop/configure.
 """
 
 import json
-import subprocess
 import threading
 import time
 import tkinter as tk
@@ -14,6 +13,7 @@ import winsound
 import sys
 import os
 import queue
+import heapq
 
 # Third-party imports for tray icon
 from PIL import Image, ImageDraw, ImageFont
@@ -27,16 +27,20 @@ class SplashReminder:
         self.config_path = self.base_path / config_path
         self.icon_path = self.base_path / "icon.ico"
         self.load_config()
-        self.timers = []
         self.splash_lock = threading.Lock()
         self.running = False
         self.paused = False
         self.tray_icon = None
         self.stop_event = threading.Event()
+        # Single scheduler thread with heap-based priority queue
+        self.scheduler_heap = []  # (next_fire_time, reminder_id, reminder_data)
+        self.scheduler_lock = threading.Lock()
+        self.scheduler_thread = None
+        self.reminder_counter = 0  # Unique ID for heap tie-breaking
         # Queue for combining overlapping reminders
-        self.reminder_queue = []
-        self.queue_lock = threading.Lock()
-        self.queue_timer = None
+        self.pending_reminders = []
+        self.pending_lock = threading.Lock()
+        self.pending_timer = None
         # Thread-safe queue for displaying splashes on main thread
         self.display_queue = queue.Queue()
         # Command queue for menu actions (must run on main thread)
@@ -113,27 +117,27 @@ class SplashReminder:
         return Image.open(self.icon_path)
 
     def queue_reminder(self, message, color, reminder_type="splash"):
-        """Add reminder to queue and process after a short delay to combine overlapping ones."""
-        with self.queue_lock:
-            self.reminder_queue.append({"message": message, "color": color, "type": reminder_type})
+        """Add reminder to pending list and process after a short delay to combine overlapping ones."""
+        with self.pending_lock:
+            self.pending_reminders.append({"message": message, "color": color, "type": reminder_type})
 
             # Cancel existing timer if any
-            if self.queue_timer:
-                self.queue_timer.cancel()
+            if self.pending_timer:
+                self.pending_timer.cancel()
 
             # Start new timer - wait 2 seconds to collect any other reminders
-            self.queue_timer = threading.Timer(2.0, self.process_queue)
-            self.queue_timer.start()
+            self.pending_timer = threading.Timer(2.0, self.process_pending)
+            self.pending_timer.start()
 
-    def process_queue(self):
-        """Process all queued reminders and queue them for display on main thread."""
-        with self.queue_lock:
-            if not self.reminder_queue:
+    def process_pending(self):
+        """Process all pending reminders and queue them for display on main thread."""
+        with self.pending_lock:
+            if not self.pending_reminders:
                 return
 
-            reminders = self.reminder_queue.copy()
-            self.reminder_queue.clear()
-            self.queue_timer = None
+            reminders = self.pending_reminders.copy()
+            self.pending_reminders.clear()
+            self.pending_timer = None
 
         if not self.running:
             return
@@ -444,70 +448,76 @@ class SplashReminder:
             # Run the splash window
             splash.mainloop()
 
-    def schedule_interval_reminder(self, reminder):
-        """Schedule a recurring interval-based reminder."""
-        message = reminder["message"]
-        # Support both interval_minutes and interval_seconds
-        if "interval_seconds" in reminder:
-            interval = reminder["interval_seconds"]
-        else:
-            interval = reminder["interval_minutes"] * 60
-        color = reminder.get("color", "#3498DB")
-        reminder_type = reminder.get("type", "splash")
+    def add_reminder_to_heap(self, fire_time, reminder_data):
+        """Add a reminder to the scheduler heap."""
+        with self.scheduler_lock:
+            self.reminder_counter += 1
+            heapq.heappush(self.scheduler_heap, (fire_time, self.reminder_counter, reminder_data))
 
-        def reminder_loop():
-            while not self.stop_event.is_set():
-                # Wait for interval, checking stop_event periodically
-                elapsed = 0
-                while elapsed < interval and not self.stop_event.is_set():
-                    sleep_time = min(1.0, interval - elapsed)
-                    time.sleep(sleep_time)
-                    elapsed += sleep_time
+    def get_next_fire_time_interval(self, interval_seconds):
+        """Calculate next fire time for an interval reminder."""
+        return time.time() + interval_seconds
 
-                if self.running and not self.stop_event.is_set():
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Reminder: {message}")
-                    self.show_splash(message, color, reminder_type)
+    def get_next_fire_time_scheduled(self, target_time_str):
+        """Calculate next fire time for a scheduled reminder."""
+        now = datetime.now()
+        time_parts = target_time_str.split(":")
+        hour = int(time_parts[0])
+        minute = int(time_parts[1])
+        second = int(time_parts[2]) if len(time_parts) > 2 else 0
+        target = now.replace(hour=hour, minute=minute, second=second, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+        return target.timestamp()
 
-        thread = threading.Thread(target=reminder_loop, daemon=True)
-        thread.start()
-        self.timers.append(thread)
+    def scheduler_loop(self):
+        """Single scheduler thread that processes all reminders."""
+        while not self.stop_event.is_set():
+            now = time.time()
 
-    def schedule_timed_reminder(self, reminder):
-        """Schedule a reminder at a specific time each day."""
-        message = reminder["message"]
-        target_time = reminder["time"]
-        color = reminder.get("color", "#3498DB")
-        reminder_type = reminder.get("type", "splash")
+            with self.scheduler_lock:
+                if not self.scheduler_heap:
+                    # No reminders, sleep briefly and check again
+                    pass
+                else:
+                    # Peek at next reminder
+                    next_time, _, _ = self.scheduler_heap[0]
 
-        def get_seconds_until_target():
-            now = datetime.now()
-            time_parts = target_time.split(":")
-            hour = int(time_parts[0])
-            minute = int(time_parts[1])
-            second = int(time_parts[2]) if len(time_parts) > 2 else 0
-            target = now.replace(hour=hour, minute=minute, second=second, microsecond=0)
-            if target <= now:
-                target += timedelta(days=1)
-            return (target - now).total_seconds()
+                    if next_time <= now:
+                        # Fire this reminder
+                        _, _, reminder_data = heapq.heappop(self.scheduler_heap)
 
-        def reminder_loop():
-            while not self.stop_event.is_set():
-                wait_seconds = get_seconds_until_target()
+                        if self.running:
+                            msg = reminder_data["message"]
+                            color = reminder_data["color"]
+                            rtype = reminder_data.get("type", "splash")
+                            kind = reminder_data.get("kind", "interval")
 
-                # Wait, checking stop_event periodically
-                waited = 0
-                while waited < wait_seconds and not self.stop_event.is_set():
-                    time.sleep(min(1, wait_seconds - waited))
-                    waited += 1
+                            print(f"[{datetime.now().strftime('%H:%M:%S')}] {kind.title()}: {msg[:30]}...")
+                            self.show_splash(msg, color, rtype)
 
-                if self.running and not self.stop_event.is_set():
-                    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scheduled: {message}")
-                    self.show_splash(message, color, reminder_type)
-                    time.sleep(1)
+                        # Reschedule
+                        if reminder_data.get("kind") == "interval":
+                            interval = reminder_data["interval"]
+                            new_time = time.time() + interval
+                            self.reminder_counter += 1
+                            heapq.heappush(self.scheduler_heap, (new_time, self.reminder_counter, reminder_data))
+                        elif reminder_data.get("kind") == "scheduled":
+                            new_time = self.get_next_fire_time_scheduled(reminder_data["target_time"])
+                            self.reminder_counter += 1
+                            heapq.heappush(self.scheduler_heap, (new_time, self.reminder_counter, reminder_data))
 
-        thread = threading.Thread(target=reminder_loop, daemon=True)
-        thread.start()
-        self.timers.append(thread)
+                        continue  # Check for more due reminders
+
+            # Sleep until next reminder or max 1 second (to check stop_event)
+            with self.scheduler_lock:
+                if self.scheduler_heap:
+                    next_time, _, _ = self.scheduler_heap[0]
+                    sleep_time = min(1.0, max(0.01, next_time - time.time()))
+                else:
+                    sleep_time = 1.0
+
+            self.stop_event.wait(sleep_time)
 
     def start_reminders(self):
         """Start all scheduled reminders."""
@@ -517,28 +527,63 @@ class SplashReminder:
         self.running = True
         self.stop_event.clear()
 
+        # Clear any old reminders from heap
+        with self.scheduler_lock:
+            self.scheduler_heap.clear()
+            self.reminder_counter = 0
+
         print("Starting reminders...")
+
+        # Add interval reminders to heap
         for reminder in self.config.get("reminders", []):
-            self.schedule_interval_reminder(reminder)
             if "interval_seconds" in reminder:
+                interval = reminder["interval_seconds"]
                 print(f"  [Interval] {reminder['message']} every {reminder['interval_seconds']} sec")
             else:
+                interval = reminder["interval_minutes"] * 60
                 print(f"  [Interval] {reminder['message']} every {reminder['interval_minutes']} min")
 
+            reminder_data = {
+                "message": reminder["message"],
+                "color": reminder.get("color", "#3498DB"),
+                "type": reminder.get("type", "splash"),
+                "kind": "interval",
+                "interval": interval
+            }
+            fire_time = self.get_next_fire_time_interval(interval)
+            self.add_reminder_to_heap(fire_time, reminder_data)
+
+        # Add scheduled reminders to heap
         for reminder in self.config.get("scheduled", []):
-            self.schedule_timed_reminder(reminder)
             print(f"  [Scheduled] {reminder['message']} at {reminder['time']}")
+            reminder_data = {
+                "message": reminder["message"],
+                "color": reminder.get("color", "#3498DB"),
+                "type": reminder.get("type", "splash"),
+                "kind": "scheduled",
+                "target_time": reminder["time"]
+            }
+            fire_time = self.get_next_fire_time_scheduled(reminder["time"])
+            self.add_reminder_to_heap(fire_time, reminder_data)
 
-        # Schedule hourly motivation messages
+        # Add motivation messages to heap
         for motivation in self.config.get("motivation", []):
-            self.schedule_timed_reminder({
-                "message": motivation["message"],
-                "time": motivation["time"],
-                "color": "#FFD700",
-                "type": "splash"
-            })
             print(f"  [Motivation] {motivation['time']}")
+            reminder_data = {
+                "message": motivation["message"],
+                "color": "#FFD700",
+                "type": "splash",
+                "kind": "scheduled",
+                "target_time": motivation["time"]
+            }
+            fire_time = self.get_next_fire_time_scheduled(motivation["time"])
+            self.add_reminder_to_heap(fire_time, reminder_data)
 
+        # Start single scheduler thread
+        self.scheduler_thread = threading.Thread(target=self.scheduler_loop, daemon=True)
+        self.scheduler_thread.start()
+
+        print(f"  Total: {len(self.scheduler_heap)} reminders using 1 thread")
         self.update_tray_menu()
 
     def stop_reminders(self):
@@ -546,20 +591,24 @@ class SplashReminder:
         self.running = False
         self.stop_event.set()
 
-        # Cancel any pending queue timer
-        if self.queue_timer:
-            self.queue_timer.cancel()
-            self.queue_timer = None
+        # Cancel any pending timer
+        if self.pending_timer:
+            self.pending_timer.cancel()
+            self.pending_timer = None
 
-        # Clear the queue
-        with self.queue_lock:
-            self.reminder_queue.clear()
+        # Clear pending reminders
+        with self.pending_lock:
+            self.pending_reminders.clear()
 
-        # Wait for threads to finish (with timeout)
-        for t in self.timers:
-            t.join(timeout=0.5)
+        # Wait for scheduler thread to finish
+        if self.scheduler_thread:
+            self.scheduler_thread.join(timeout=2.0)
+            self.scheduler_thread = None
 
-        self.timers.clear()
+        # Clear the heap
+        with self.scheduler_lock:
+            self.scheduler_heap.clear()
+
         print("Reminders stopped.")
         self.update_tray_menu()
 
