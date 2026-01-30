@@ -432,16 +432,21 @@ class SplashReminder:
     def schedule_interval_reminder(self, reminder):
         """Schedule a recurring interval-based reminder."""
         message = reminder["message"]
-        interval = reminder["interval_minutes"] * 60
+        # Support both interval_minutes and interval_seconds
+        if "interval_seconds" in reminder:
+            interval = reminder["interval_seconds"]
+        else:
+            interval = reminder["interval_minutes"] * 60
         color = reminder.get("color", "#3498DB")
 
         def reminder_loop():
             while not self.stop_event.is_set():
                 # Wait for interval, checking stop_event periodically
-                for _ in range(interval):
-                    if self.stop_event.is_set():
-                        return
-                    time.sleep(1)
+                elapsed = 0
+                while elapsed < interval and not self.stop_event.is_set():
+                    sleep_time = min(1.0, interval - elapsed)
+                    time.sleep(sleep_time)
+                    elapsed += sleep_time
 
                 if self.running and not self.stop_event.is_set():
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Reminder: {message}")
@@ -498,7 +503,10 @@ class SplashReminder:
         print("Starting reminders...")
         for reminder in self.config.get("reminders", []):
             self.schedule_interval_reminder(reminder)
-            print(f"  [Interval] {reminder['message']} every {reminder['interval_minutes']} min")
+            if "interval_seconds" in reminder:
+                print(f"  [Interval] {reminder['message']} every {reminder['interval_seconds']} sec")
+            else:
+                print(f"  [Interval] {reminder['message']} every {reminder['interval_minutes']} min")
 
         for reminder in self.config.get("scheduled", []):
             self.schedule_timed_reminder(reminder)
