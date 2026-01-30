@@ -32,6 +32,10 @@ class SplashReminder:
         self.paused = False
         self.tray_icon = None
         self.stop_event = threading.Event()
+        # Queue for combining overlapping reminders
+        self.reminder_queue = []
+        self.queue_lock = threading.Lock()
+        self.queue_timer = None
 
     def load_config(self):
         """Load configuration from JSON file."""
@@ -102,6 +106,142 @@ class SplashReminder:
         if not self.icon_path.exists():
             return self.create_icon()
         return Image.open(self.icon_path)
+
+    def queue_reminder(self, message, color):
+        """Add reminder to queue and process after a short delay to combine overlapping ones."""
+        with self.queue_lock:
+            self.reminder_queue.append({"message": message, "color": color})
+
+            # Cancel existing timer if any
+            if self.queue_timer:
+                self.queue_timer.cancel()
+
+            # Start new timer - wait 2 seconds to collect any other reminders
+            self.queue_timer = threading.Timer(2.0, self.process_queue)
+            self.queue_timer.start()
+
+    def process_queue(self):
+        """Process all queued reminders and show them combined."""
+        with self.queue_lock:
+            if not self.reminder_queue:
+                return
+
+            reminders = self.reminder_queue.copy()
+            self.reminder_queue.clear()
+            self.queue_timer = None
+
+        if not self.running:
+            return
+
+        # Combine messages
+        if len(reminders) == 1:
+            self.show_splash_internal(reminders[0]["message"], reminders[0]["color"])
+        else:
+            # Multiple reminders - combine them
+            combined_message = "\n\n".join([r["message"] for r in reminders])
+            # Use the first reminder's color as primary
+            primary_color = reminders[0]["color"]
+            all_colors = [r["color"] for r in reminders]
+            self.show_combined_splash(combined_message, all_colors)
+
+    def show_combined_splash(self, message, colors):
+        """Show a splash with multiple reminders combined."""
+        if self.paused:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Paused - showing mini popup (combined)")
+            self.show_mini_popup(message.replace("\n\n", " | "), colors[0])
+            return
+
+        with self.splash_lock:
+            if self.config.get("play_sound", True):
+                try:
+                    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                except:
+                    pass
+
+            bg_color = "#1a1a1a"
+            text_muted = "#888888"
+
+            splash = tk.Tk()
+            splash.attributes('-fullscreen', True)
+            splash.attributes('-topmost', True)
+            splash.configure(bg=bg_color)
+            splash.overrideredirect(True)
+
+            frame = tk.Frame(splash, bg=bg_color)
+            frame.place(relx=0.5, rely=0.5, anchor='center')
+
+            # Multiple colored accent bars
+            bar_frame = tk.Frame(frame, bg=bg_color)
+            bar_frame.pack(pady=(0, 30))
+            for color in colors:
+                bar = tk.Frame(bar_frame, bg=color, height=6, width=60)
+                bar.pack(side='left', padx=2)
+
+            # Show each message with its color
+            messages = message.split("\n\n")
+            font_size = min(self.config.get("font_size", 72), 56)  # Smaller for multiple
+
+            for i, msg in enumerate(messages):
+                color = colors[i] if i < len(colors) else colors[0]
+                label = tk.Label(
+                    frame,
+                    text=msg,
+                    font=("Arial", font_size, "bold"),
+                    fg=color,
+                    bg=bg_color,
+                    wraplength=splash.winfo_screenwidth() - 200
+                )
+                label.pack(pady=10)
+
+            time_label = tk.Label(
+                frame,
+                text=datetime.now().strftime("%H:%M"),
+                font=("Arial", 36),
+                fg="#ffffff",
+                bg=bg_color
+            )
+            time_label.pack(pady=10)
+
+            dismiss_label = tk.Label(
+                frame,
+                text="Click anywhere or press any key to dismiss",
+                font=("Arial", 18),
+                fg=text_muted,
+                bg=bg_color
+            )
+            dismiss_label.pack(pady=40)
+
+            display_seconds = self.config.get("display_seconds", 8)
+            countdown_var = tk.StringVar(value=f"Auto-closing in {display_seconds}s")
+            countdown_label = tk.Label(
+                frame,
+                textvariable=countdown_var,
+                font=("Arial", 14),
+                fg=text_muted,
+                bg=bg_color
+            )
+            countdown_label.pack(pady=10)
+
+            def close_splash(event=None):
+                try:
+                    splash.destroy()
+                except:
+                    pass
+
+            splash.bind('<Button-1>', close_splash)
+            splash.bind('<Key>', close_splash)
+            splash.focus_force()
+
+            def countdown(remaining):
+                if remaining > 0:
+                    countdown_var.set(f"Auto-closing in {remaining}s")
+                    splash.after(1000, countdown, remaining - 1)
+                else:
+                    close_splash()
+
+            splash.after(1000, countdown, display_seconds - 1)
+            splash.after(display_seconds * 1000, close_splash)
+            splash.mainloop()
 
     def show_mini_popup(self, message, color):
         """Show a small popup window (works even in Do Not Disturb mode)."""
@@ -177,6 +317,12 @@ class SplashReminder:
         popup.mainloop()
 
     def show_splash(self, message, color):
+        """Queue a reminder to be shown (combines with others if they arrive close together)."""
+        if not self.running:
+            return
+        self.queue_reminder(message, color)
+
+    def show_splash_internal(self, message, color):
         """Show a full-screen splash reminder (or mini popup if paused)."""
         if not self.running:
             return
