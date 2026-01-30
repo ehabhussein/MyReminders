@@ -30,12 +30,31 @@ A Windows system tray application that reminds you to take breaks, stay hydrated
 
 ## Auto-Start on Windows
 
-Create a shortcut in your Startup folder:
+### Option 1: Run the install script
+
+Save this as `install_startup.bat` in the project folder and run it:
+
+```batch
+@echo off
+set "SCRIPT_DIR=%~dp0"
+set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
+
+powershell -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%STARTUP%\SplashReminders.lnk'); $s.TargetPath = 'pythonw.exe'; $s.Arguments = '%SCRIPT_DIR%reminder_service.py'; $s.WorkingDirectory = '%SCRIPT_DIR%'; $s.Save()"
+
+echo Installed to startup. Splash Reminders will run on login.
+pause
+```
+
+### Option 2: Manual setup
 
 1. Press `Win + R`, type `shell:startup`, press Enter
 2. Create a shortcut with:
    - Target: `pythonw.exe D:\path\to\reminder_service.py`
    - Start in: `D:\path\to\`
+
+### Uninstall from startup
+
+Delete `SplashReminders.lnk` from `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`
 
 ## Configuration
 
