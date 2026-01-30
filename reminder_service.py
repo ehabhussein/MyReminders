@@ -39,6 +39,8 @@ class SplashReminder:
         self.queue_timer = None
         # Thread-safe queue for displaying splashes on main thread
         self.display_queue = queue.Queue()
+        # Command queue for menu actions (must run on main thread)
+        self.command_queue = queue.Queue()
 
     def load_config(self):
         """Load configuration from JSON file."""
@@ -602,6 +604,10 @@ class SplashReminder:
         if self.tray_icon:
             self.tray_icon.menu = self.create_menu()
 
+    def queue_command(self, cmd):
+        """Queue a command to run on the main thread."""
+        self.command_queue.put(cmd)
+
     def create_menu(self):
         """Create the system tray menu."""
         return pystray.Menu(
@@ -609,24 +615,24 @@ class SplashReminder:
             Item('─────────────', lambda: None, enabled=False),
             Item(
                 'Start Reminders',
-                lambda: self.start_reminders(),
+                lambda: self.queue_command('start'),
                 visible=not self.running
             ),
             Item(
                 'Stop Reminders',
-                lambda: self.stop_reminders(),
+                lambda: self.queue_command('stop'),
                 visible=self.running
             ),
             Item(
                 'Pause (Mini Popups)' if not self.paused else 'Resume (Full Splash)',
-                lambda: self.toggle_pause(),
+                lambda: self.queue_command('toggle_pause'),
                 visible=self.running
             ),
             Item('─────────────', lambda: None, enabled=False),
             Item('Edit Schedule...', lambda: self.open_config()),
-            Item('Reload Config', lambda: self.reload_config()),
+            Item('Reload Config', lambda: self.queue_command('reload')),
             Item('─────────────', lambda: None, enabled=False),
-            Item('Quit', lambda: self.quit_app())
+            Item('Quit', lambda: self.queue_command('quit'))
         )
 
     def show_startup_splash(self):
@@ -758,6 +764,29 @@ class SplashReminder:
         except Exception as e:
             print(f"Error processing display queue: {e}")
 
+    def process_command_queue(self):
+        """Process pending menu commands from the main thread."""
+        try:
+            while True:
+                try:
+                    cmd = self.command_queue.get_nowait()
+                    if cmd == 'start':
+                        self.start_reminders()
+                    elif cmd == 'stop':
+                        self.stop_reminders()
+                    elif cmd == 'toggle_pause':
+                        self.toggle_pause()
+                    elif cmd == 'reload':
+                        self.reload_config()
+                    elif cmd == 'quit':
+                        self.quit_app()
+                        return False  # Signal to exit main loop
+                except queue.Empty:
+                    break
+        except Exception as e:
+            print(f"Error processing command queue: {e}")
+        return True
+
     def run(self):
         """Run the system tray application."""
         print("=" * 50)
@@ -791,10 +820,12 @@ class SplashReminder:
         tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
         tray_thread.start()
 
-        # Main thread handles display queue (tkinter must run on main thread)
+        # Main thread handles display and command queues (tkinter must run on main thread)
         try:
             while tray_thread.is_alive() and not self.stop_event.is_set():
                 self.process_display_queue()
+                if not self.process_command_queue():
+                    break  # quit command received
                 time.sleep(0.5)
         except KeyboardInterrupt:
             self.quit_app()
