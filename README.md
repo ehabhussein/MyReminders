@@ -91,11 +91,21 @@ Edit `config.json` to customize your reminders:
 
 | Option | Description |
 |--------|-------------|
-| `reminders` | Interval-based reminders (every X minutes) |
+| `reminders` | Interval-based reminders (every X minutes/seconds) |
 | `scheduled` | Time-based reminders (at specific times daily) |
 | `display_seconds` | How long the splash stays on screen |
 | `font_size` | Size of the reminder text |
 | `play_sound` | Play a sound when reminder appears |
+
+### Interval Options
+
+`interval_minutes` supports decimals for sub-minute intervals:
+
+```json
+{"message": "Every 30 minutes", "interval_minutes": 30, "color": "#FF6B35"}
+{"message": "Every 18 seconds", "interval_minutes": 0.3, "color": "#4ECDC4"}
+{"message": "Every 36 seconds", "interval_minutes": 0.6, "color": "#9B59B6"}
+```
 
 ### Time Format
 
