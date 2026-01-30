@@ -1,0 +1,34 @@
+{
+    "reminders": [
+        {
+            "message": "Stand Up & Stretch!",
+            "interval_minutes": 30,
+            "color": "#FF6B35"
+        },
+        {
+            "message": "Drink Water - Stay Hydrated!",
+            "interval_minutes": 20,
+            "color": "#4ECDC4"
+        },
+        {
+            "message": "Take a Break - Rest Your Eyes!",
+            "interval_minutes": 45,
+            "color": "#9B59B6"
+        }
+    ],
+    "scheduled": [
+        {
+            "message": "Lunch Time!",
+            "time": "12:00:00",
+            "color": "#E74C3C"
+        },
+        {
+            "message": "End of Day - Wrap Up!",
+            "time": "17:30:00",
+            "color": "#2ECC71"
+        }
+    ],
+    "display_seconds": 8,
+    "font_size": 72,
+    "play_sound": true
+}
