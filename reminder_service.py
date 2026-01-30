@@ -510,6 +510,20 @@ class SplashReminder:
         """Stop all reminders."""
         self.running = False
         self.stop_event.set()
+
+        # Cancel any pending queue timer
+        if self.queue_timer:
+            self.queue_timer.cancel()
+            self.queue_timer = None
+
+        # Clear the queue
+        with self.queue_lock:
+            self.reminder_queue.clear()
+
+        # Wait for threads to finish (with timeout)
+        for t in self.timers:
+            t.join(timeout=0.5)
+
         self.timers.clear()
         print("Reminders stopped.")
         self.update_tray_menu()
@@ -528,6 +542,8 @@ class SplashReminder:
     def reload_config(self):
         """Reload configuration and restart reminders."""
         self.stop_reminders()
+        # Small delay to ensure threads are fully stopped
+        time.sleep(0.5)
         self.load_config()
         self.start_reminders()
         print("Configuration reloaded.")
