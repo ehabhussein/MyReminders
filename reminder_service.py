@@ -107,10 +107,10 @@ class SplashReminder:
             return self.create_icon()
         return Image.open(self.icon_path)
 
-    def queue_reminder(self, message, color):
+    def queue_reminder(self, message, color, reminder_type="splash"):
         """Add reminder to queue and process after a short delay to combine overlapping ones."""
         with self.queue_lock:
-            self.reminder_queue.append({"message": message, "color": color})
+            self.reminder_queue.append({"message": message, "color": color, "type": reminder_type})
 
             # Cancel existing timer if any
             if self.queue_timer:
@@ -135,14 +135,23 @@ class SplashReminder:
 
         # Combine messages
         if len(reminders) == 1:
-            self.show_splash_internal(reminders[0]["message"], reminders[0]["color"])
+            r = reminders[0]
+            # Check if forced popup type or paused
+            if r.get("type") == "popup":
+                self.show_mini_popup(r["message"], r["color"])
+            else:
+                self.show_splash_internal(r["message"], r["color"])
         else:
             # Multiple reminders - combine them
+            # If any is popup type, show as popup
+            has_popup = any(r.get("type") == "popup" for r in reminders)
             combined_message = "\n\n".join([r["message"] for r in reminders])
-            # Use the first reminder's color as primary
-            primary_color = reminders[0]["color"]
             all_colors = [r["color"] for r in reminders]
-            self.show_combined_splash(combined_message, all_colors)
+
+            if has_popup or self.paused:
+                self.show_mini_popup(combined_message.replace("\n\n", " | "), all_colors[0])
+            else:
+                self.show_combined_splash(combined_message, all_colors)
 
     def show_combined_splash(self, message, colors):
         """Show a splash with multiple reminders combined."""
@@ -316,11 +325,11 @@ class SplashReminder:
         popup.after(5000, close)
         popup.mainloop()
 
-    def show_splash(self, message, color):
+    def show_splash(self, message, color, reminder_type="splash"):
         """Queue a reminder to be shown (combines with others if they arrive close together)."""
         if not self.running:
             return
-        self.queue_reminder(message, color)
+        self.queue_reminder(message, color, reminder_type)
 
     def show_splash_internal(self, message, color):
         """Show a full-screen splash reminder (or mini popup if paused)."""
@@ -438,6 +447,7 @@ class SplashReminder:
         else:
             interval = reminder["interval_minutes"] * 60
         color = reminder.get("color", "#3498DB")
+        reminder_type = reminder.get("type", "splash")
 
         def reminder_loop():
             while not self.stop_event.is_set():
@@ -450,7 +460,7 @@ class SplashReminder:
 
                 if self.running and not self.stop_event.is_set():
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Reminder: {message}")
-                    self.show_splash(message, color)
+                    self.show_splash(message, color, reminder_type)
 
         thread = threading.Thread(target=reminder_loop, daemon=True)
         thread.start()
@@ -461,6 +471,7 @@ class SplashReminder:
         message = reminder["message"]
         target_time = reminder["time"]
         color = reminder.get("color", "#3498DB")
+        reminder_type = reminder.get("type", "splash")
 
         def get_seconds_until_target():
             now = datetime.now()
@@ -485,7 +496,7 @@ class SplashReminder:
 
                 if self.running and not self.stop_event.is_set():
                     print(f"[{datetime.now().strftime('%H:%M:%S')}] Scheduled: {message}")
-                    self.show_splash(message, color)
+                    self.show_splash(message, color, reminder_type)
                     time.sleep(1)
 
         thread = threading.Thread(target=reminder_loop, daemon=True)
@@ -511,6 +522,16 @@ class SplashReminder:
         for reminder in self.config.get("scheduled", []):
             self.schedule_timed_reminder(reminder)
             print(f"  [Scheduled] {reminder['message']} at {reminder['time']}")
+
+        # Schedule hourly motivation messages
+        for motivation in self.config.get("motivation", []):
+            self.schedule_timed_reminder({
+                "message": motivation["message"],
+                "time": motivation["time"],
+                "color": "#FFD700",
+                "type": "splash"
+            })
+            print(f"  [Motivation] {motivation['time']}")
 
         self.update_tray_menu()
 
@@ -607,20 +628,26 @@ class SplashReminder:
         """Show a motivational startup splash."""
         import random
 
-        messages = [
-            "Rise and grind, you magnificent bastard!\nToday is YOUR day to crush it.",
-            "Welcome back, legend.\nTime to make sh*t happen.",
-            "Another day, another chance\nto be absolutely unstoppable.",
-            "You woke up today.\nThat's already a win. Now go dominate.",
-            "Coffee? Check. Attitude? Fierce.\nLet's f*cking GO.",
-            "They said you couldn't.\nProve those bastards wrong.",
-            "You're not here to be average.\nYou're here to be a goddamn storm.",
-            "Breathe in confidence.\nExhale all that bullsh*t doubt.",
-            "Hey badass, the world is waiting.\nDon't keep it waiting too long.",
-            "Your potential is scary.\nTime to terrify the hell out of mediocrity."
-        ]
+        # Check if startup message is enabled
+        startup_config = self.config.get("startup_message", {"enabled": True})
+        if not startup_config.get("enabled", True):
+            return
+
+        # Get messages from motivation config or use defaults
+        motivation_list = self.config.get("motivation", [])
+        if motivation_list:
+            messages = [m["message"] for m in motivation_list]
+        else:
+            messages = [
+                "Rise and grind, you magnificent bastard!\nToday is YOUR day to crush it.",
+                "Welcome back, legend.\nTime to make sh*t happen.",
+                "Another day, another chance\nto be absolutely unstoppable.",
+                "Coffee? Check. Attitude? Fierce.\nLet's f*cking GO.",
+                "They said you couldn't.\nProve those bastards wrong."
+            ]
 
         message = random.choice(messages)
+        accent_color = startup_config.get("color", "#FFD700")
 
         with self.splash_lock:
             if self.config.get("play_sound", True):
@@ -630,7 +657,6 @@ class SplashReminder:
                     pass
 
             bg_color = "#1a1a1a"
-            accent_color = "#FFD700"  # Gold
             text_muted = "#888888"
 
             splash = tk.Tk()

@@ -2,18 +2,21 @@
     "reminders": [
         {
             "message": "Stand Up & Stretch!",
-            "interval_minutes": 30,
-            "color": "#FF6B35"
+            "interval_minutes": 60,
+            "color": "#FF6B35",
+            "type": "splash"
         },
         {
             "message": "Drink Water - Stay Hydrated!",
-            "interval_minutes": 20,
-            "color": "#4ECDC4"
+            "interval_minutes": 30,
+            "color": "#4ECDC4",
+            "type": "popup"
         },
         {
             "message": "Take a Break - Rest Your Eyes!",
-            "interval_minutes": 45,
-            "color": "#9B59B6"
+            "interval_minutes": 60,
+            "color": "#9B59B6",
+            "type": "splash"
         }
     ],
     "scheduled": [
@@ -28,6 +31,30 @@
             "color": "#2ECC71"
         }
     ],
+    "motivation": [
+        {"time": "06:00", "message": "The early bird gets the worm.\nBut you? You get the whole damn bakery."},
+        {"time": "07:00", "message": "Rise and grind, you magnificent bastard!\nToday is YOUR day to crush it."},
+        {"time": "08:00", "message": "Coffee? Check. Attitude? Fierce.\nLet's f*cking GO."},
+        {"time": "09:00", "message": "9 AM. Prime time to show the world\nwhat a badass looks like."},
+        {"time": "10:00", "message": "You're already 4 hours into being awesome.\nKeep that sh*t up."},
+        {"time": "11:00", "message": "Almost lunch. But first,\nlet's make someone's jaw drop."},
+        {"time": "12:00", "message": "Noon check-in: Still killing it?\nDamn right you are."},
+        {"time": "13:00", "message": "Post-lunch slump? Not for legends.\nYou don't do slumps."},
+        {"time": "14:00", "message": "Afternoon energy unlocked.\nTime to finish what you started, champ."},
+        {"time": "15:00", "message": "3 PM. Others are fading.\nYou're just getting warmed up."},
+        {"time": "16:00", "message": "The finish line is in sight.\nSprint like the beast you are."},
+        {"time": "17:00", "message": "5 PM. You survived AND thrived.\nThat's not luck, that's skill."},
+        {"time": "18:00", "message": "Clock out, champion.\nYou earned every damn minute of rest."},
+        {"time": "19:00", "message": "Evening mode: activated.\nTime to recharge that unstoppable energy."},
+        {"time": "20:00", "message": "8 PM. Reflect on your wins today.\nBet there's more than you think."},
+        {"time": "21:00", "message": "Wind down, warrior.\nTomorrow needs you at full power."},
+        {"time": "22:00", "message": "Sleep is for champions.\nAnd you, my friend, are a f*cking champion."},
+        {"time": "23:00", "message": "Still up? That's dedication.\nBut rest is part of the grind too."}
+    ],
+    "startup_message": {
+        "enabled": true,
+        "color": "#FFD700"
+    },
     "display_seconds": 8,
     "font_size": 72,
     "play_sound": true
