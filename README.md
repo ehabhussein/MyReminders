@@ -72,13 +72,28 @@ Edit `config.json` to customize your reminders:
             "message": "Drink Water - Stay Hydrated!",
             "interval_minutes": 20,
             "color": "#4ECDC4"
+        },
+        {
+            "message": "Blink & Rest Your Eyes!",
+            "interval_minutes": 0.3,
+            "color": "#9B59B6"
         }
     ],
     "scheduled": [
         {
+            "message": "Morning Standup!",
+            "time": "09:00",
+            "color": "#3498DB"
+        },
+        {
             "message": "Lunch Time!",
             "time": "12:00:00",
             "color": "#E74C3C"
+        },
+        {
+            "message": "End of Day - Wrap Up!",
+            "time": "17:30:00",
+            "color": "#2ECC71"
         }
     ],
     "display_seconds": 8,
