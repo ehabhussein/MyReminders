@@ -89,28 +89,58 @@ Edit `config.json` to customize your reminders:
 
 ### Options
 
-| Option | Description |
-|--------|-------------|
-| `reminders` | Interval-based reminders (every X minutes/seconds) |
-| `scheduled` | Time-based reminders (at specific times daily) |
-| `display_seconds` | How long the splash stays on screen |
-| `font_size` | Size of the reminder text |
-| `play_sound` | Play a sound when reminder appears |
+| Option | Description | Default |
+|--------|-------------|---------|
+| `reminders` | Interval-based reminders (every X minutes/seconds) | `[]` |
+| `scheduled` | Time-based reminders (at specific times daily) | `[]` |
+| `display_seconds` | How long the splash stays on screen | `8` |
+| `font_size` | Size of the reminder text (in pixels) | `72` |
+| `play_sound` | Play a sound when reminder appears | `true` |
 
-### Interval Options
+### Interval Reminders
 
 `interval_minutes` supports decimals for sub-minute intervals:
 
 ```json
-{"message": "Every 30 minutes", "interval_minutes": 30, "color": "#FF6B35"}
-{"message": "Every 18 seconds", "interval_minutes": 0.3, "color": "#4ECDC4"}
-{"message": "Every 36 seconds", "interval_minutes": 0.6, "color": "#9B59B6"}
+"reminders": [
+    {"message": "Every 30 minutes", "interval_minutes": 30, "color": "#FF6B35"},
+    {"message": "Every 18 seconds", "interval_minutes": 0.3, "color": "#4ECDC4"},
+    {"message": "Every 36 seconds", "interval_minutes": 0.6, "color": "#9B59B6"}
+]
 ```
 
-### Time Format
+### Scheduled Reminders
 
-- `"HH:MM:SS"` - e.g., `"13:30:00"` for 1:30 PM
-- `"HH:MM"` - e.g., `"09:00"` for 9:00 AM
+Trigger at specific times daily. Supports `HH:MM:SS` or `HH:MM` format:
+
+```json
+"scheduled": [
+    {"message": "Morning Standup!", "time": "09:00", "color": "#3498DB"},
+    {"message": "Lunch Time!", "time": "12:00:00", "color": "#E74C3C"},
+    {"message": "End of Day!", "time": "17:30:00", "color": "#2ECC71"}
+]
+```
+
+### Display Settings
+
+```json
+"display_seconds": 8,   // Splash stays for 8 seconds
+"font_size": 72,        // Large text (try 48 for smaller, 96 for larger)
+"play_sound": true      // Set to false to disable sound
+```
+
+### Colors
+
+Use hex color codes for custom colors:
+
+| Color | Hex Code |
+|-------|----------|
+| Orange | `#FF6B35` |
+| Teal | `#4ECDC4` |
+| Red | `#E74C3C` |
+| Green | `#2ECC71` |
+| Blue | `#3498DB` |
+| Purple | `#9B59B6` |
 
 ## Tray Menu
 
