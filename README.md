@@ -9,6 +9,9 @@ A Windows system tray application that reminds you to take breaks, stay hydrated
 - **Pause mode** - shows mini popups instead (for meetings/presentations)
 - **Interval reminders** - every X minutes (e.g., drink water every 20 min)
 - **Scheduled reminders** - at specific times (e.g., lunch at 12:00)
+- **Hourly motivation** - motivational messages throughout the day
+- **Startup splash** - inspirational message when you log in
+- **Per-reminder type** - choose splash or popup for each reminder
 - **Auto-start** with Windows
 
 ## Requirements
@@ -65,37 +68,33 @@ Edit `config.json` to customize your reminders:
     "reminders": [
         {
             "message": "Stand Up & Stretch!",
-            "interval_minutes": 30,
-            "color": "#FF6B35"
+            "interval_minutes": 60,
+            "color": "#FF6B35",
+            "type": "splash"
         },
         {
             "message": "Drink Water - Stay Hydrated!",
-            "interval_minutes": 20,
-            "color": "#4ECDC4"
-        },
-        {
-            "message": "Blink & Rest Your Eyes!",
-            "interval_seconds": 20,
-            "color": "#9B59B6"
+            "interval_minutes": 30,
+            "color": "#4ECDC4",
+            "type": "popup"
         }
     ],
     "scheduled": [
         {
-            "message": "Morning Standup!",
-            "time": "09:00",
-            "color": "#3498DB"
-        },
-        {
             "message": "Lunch Time!",
             "time": "12:00:00",
             "color": "#E74C3C"
-        },
-        {
-            "message": "End of Day - Wrap Up!",
-            "time": "17:30:00",
-            "color": "#2ECC71"
         }
     ],
+    "motivation": [
+        {"time": "07:00", "message": "Rise and grind, you magnificent bastard!\nToday is YOUR day."},
+        {"time": "12:00", "message": "Noon check-in: Still killing it?\nDamn right you are."},
+        {"time": "17:00", "message": "5 PM. You survived AND thrived.\nThat's not luck, that's skill."}
+    ],
+    "startup_message": {
+        "enabled": true,
+        "color": "#FFD700"
+    },
     "display_seconds": 8,
     "font_size": 72,
     "play_sound": true
@@ -108,6 +107,8 @@ Edit `config.json` to customize your reminders:
 |--------|-------------|---------|
 | `reminders` | Interval-based reminders using `interval_minutes` or `interval_seconds` | `[]` |
 | `scheduled` | Time-based reminders (at specific times daily) | `[]` |
+| `motivation` | Hourly motivational messages | `[]` |
+| `startup_message` | Motivational splash on app start | `{"enabled": true}` |
 | `display_seconds` | How long the splash stays on screen | `8` |
 | `font_size` | Size of the reminder text (in pixels) | `72` |
 | `play_sound` | Play a sound when reminder appears | `true` |
@@ -125,6 +126,20 @@ Use `interval_minutes` or `interval_seconds` (both support decimals):
 ]
 ```
 
+### Reminder Type
+
+Each reminder can specify `"type": "splash"` or `"type": "popup"`:
+
+| Type | Behavior |
+|------|----------|
+| `"splash"` (default) | Full-screen splash, mini popup when paused |
+| `"popup"` | Always shows as small popup in corner |
+
+```json
+{"message": "Important!", "interval_minutes": 60, "color": "#FF0000", "type": "splash"},
+{"message": "Quick reminder", "interval_minutes": 15, "color": "#00FF00", "type": "popup"}
+```
+
 ### Scheduled Reminders
 
 Trigger at specific times daily. Supports `HH:MM:SS` or `HH:MM` format:
@@ -136,6 +151,32 @@ Trigger at specific times daily. Supports `HH:MM:SS` or `HH:MM` format:
     {"message": "End of Day!", "time": "17:30:00", "color": "#2ECC71"}
 ]
 ```
+
+### Hourly Motivation
+
+Motivational messages that trigger at specific hours:
+
+```json
+"motivation": [
+    {"time": "07:00", "message": "Rise and grind, you magnificent bastard!\nToday is YOUR day."},
+    {"time": "09:00", "message": "9 AM. Prime time to show the world\nwhat a badass looks like."},
+    {"time": "12:00", "message": "Noon check-in: Still killing it?\nDamn right you are."},
+    {"time": "17:00", "message": "5 PM. You survived AND thrived.\nThat's not luck, that's skill."}
+]
+```
+
+### Startup Message
+
+Show a random motivational splash when the app starts:
+
+```json
+"startup_message": {
+    "enabled": true,
+    "color": "#FFD700"
+}
+```
+
+Set `"enabled": false` to disable the startup splash.
 
 ### Display Settings
 
@@ -157,6 +198,7 @@ Use hex color codes for custom colors:
 | Green | `#2ECC71` |
 | Blue | `#3498DB` |
 | Purple | `#9B59B6` |
+| Gold | `#FFD700` |
 
 ## Tray Menu
 
