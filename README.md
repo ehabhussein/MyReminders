@@ -75,7 +75,7 @@ Edit `config.json` to customize your reminders:
         },
         {
             "message": "Blink & Rest Your Eyes!",
-            "interval_minutes": 0.3,
+            "interval_seconds": 20,
             "color": "#9B59B6"
         }
     ],
@@ -106,7 +106,7 @@ Edit `config.json` to customize your reminders:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `reminders` | Interval-based reminders (every X minutes/seconds) | `[]` |
+| `reminders` | Interval-based reminders using `interval_minutes` or `interval_seconds` | `[]` |
 | `scheduled` | Time-based reminders (at specific times daily) | `[]` |
 | `display_seconds` | How long the splash stays on screen | `8` |
 | `font_size` | Size of the reminder text (in pixels) | `72` |
@@ -114,13 +114,14 @@ Edit `config.json` to customize your reminders:
 
 ### Interval Reminders
 
-`interval_minutes` supports decimals for sub-minute intervals:
+Use `interval_minutes` or `interval_seconds` (both support decimals):
 
 ```json
 "reminders": [
     {"message": "Every 30 minutes", "interval_minutes": 30, "color": "#FF6B35"},
     {"message": "Every 18 seconds", "interval_minutes": 0.3, "color": "#4ECDC4"},
-    {"message": "Every 36 seconds", "interval_minutes": 0.6, "color": "#9B59B6"}
+    {"message": "Every 10 seconds", "interval_seconds": 10, "color": "#9B59B6"},
+    {"message": "Every half second", "interval_seconds": 0.5, "color": "#E74C3C"}
 ]
 ```
 
