@@ -603,6 +603,104 @@ class SplashReminder:
             Item('Quit', lambda: self.quit_app())
         )
 
+    def show_startup_splash(self):
+        """Show a motivational startup splash."""
+        import random
+
+        messages = [
+            "Rise and grind, you magnificent bastard!\nToday is YOUR day to crush it.",
+            "Welcome back, legend.\nTime to make sh*t happen.",
+            "Another day, another chance\nto be absolutely unstoppable.",
+            "You woke up today.\nThat's already a win. Now go dominate.",
+            "Coffee? Check. Attitude? Fierce.\nLet's f*cking GO.",
+            "They said you couldn't.\nProve those bastards wrong.",
+            "You're not here to be average.\nYou're here to be a goddamn storm.",
+            "Breathe in confidence.\nExhale all that bullsh*t doubt.",
+            "Hey badass, the world is waiting.\nDon't keep it waiting too long.",
+            "Your potential is scary.\nTime to terrify the hell out of mediocrity."
+        ]
+
+        message = random.choice(messages)
+
+        with self.splash_lock:
+            if self.config.get("play_sound", True):
+                try:
+                    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                except:
+                    pass
+
+            bg_color = "#1a1a1a"
+            accent_color = "#FFD700"  # Gold
+            text_muted = "#888888"
+
+            splash = tk.Tk()
+            splash.attributes('-fullscreen', True)
+            splash.attributes('-topmost', True)
+            splash.configure(bg=bg_color)
+            splash.overrideredirect(True)
+
+            frame = tk.Frame(splash, bg=bg_color)
+            frame.place(relx=0.5, rely=0.5, anchor='center')
+
+            # Crown/star accent
+            accent_bar = tk.Frame(frame, bg=accent_color, height=6, width=400)
+            accent_bar.pack(pady=(0, 30))
+
+            # Greeting
+            greeting = tk.Label(
+                frame,
+                text="GOOD MORNING, CHAMPION",
+                font=("Arial", 28, "bold"),
+                fg=text_muted,
+                bg=bg_color
+            )
+            greeting.pack(pady=(0, 20))
+
+            # Main message
+            label = tk.Label(
+                frame,
+                text=message,
+                font=("Arial", 52, "bold"),
+                fg=accent_color,
+                bg=bg_color,
+                justify='center'
+            )
+            label.pack(pady=20)
+
+            # Time display
+            time_label = tk.Label(
+                frame,
+                text=datetime.now().strftime("%A, %B %d • %H:%M"),
+                font=("Arial", 24),
+                fg="#ffffff",
+                bg=bg_color
+            )
+            time_label.pack(pady=20)
+
+            # Dismiss instruction
+            dismiss_label = tk.Label(
+                frame,
+                text="Click anywhere to start your day",
+                font=("Arial", 16),
+                fg=text_muted,
+                bg=bg_color
+            )
+            dismiss_label.pack(pady=40)
+
+            def close_splash(event=None):
+                try:
+                    splash.destroy()
+                except:
+                    pass
+
+            splash.bind('<Button-1>', close_splash)
+            splash.bind('<Key>', close_splash)
+            splash.focus_force()
+
+            # Auto-close after 15 seconds
+            splash.after(15000, close_splash)
+            splash.mainloop()
+
     def run(self):
         """Run the system tray application."""
         print("=" * 50)
@@ -610,6 +708,9 @@ class SplashReminder:
         print("=" * 50)
         print(f"Config: {self.config_path}")
         print("-" * 50)
+
+        # Show motivational startup splash
+        self.show_startup_splash()
 
         # Create icon
         icon_image = self.get_icon_image()
