@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 import winsound
 import sys
 import os
+import queue
 
 # Third-party imports for tray icon
 from PIL import Image, ImageDraw, ImageFont
@@ -36,6 +37,8 @@ class SplashReminder:
         self.reminder_queue = []
         self.queue_lock = threading.Lock()
         self.queue_timer = None
+        # Thread-safe queue for displaying splashes on main thread
+        self.display_queue = queue.Queue()
 
     def load_config(self):
         """Load configuration from JSON file."""
@@ -121,7 +124,7 @@ class SplashReminder:
             self.queue_timer.start()
 
     def process_queue(self):
-        """Process all queued reminders and show them combined."""
+        """Process all queued reminders and queue them for display on main thread."""
         with self.queue_lock:
             if not self.reminder_queue:
                 return
@@ -133,14 +136,15 @@ class SplashReminder:
         if not self.running:
             return
 
+        # Queue for main thread to display
         # Combine messages
         if len(reminders) == 1:
             r = reminders[0]
             # Check if forced popup type or paused
             if r.get("type") == "popup":
-                self.show_mini_popup(r["message"], r["color"])
+                self.display_queue.put(("popup", r["message"], r["color"]))
             else:
-                self.show_splash_internal(r["message"], r["color"])
+                self.display_queue.put(("splash", r["message"], r["color"]))
         else:
             # Multiple reminders - combine them
             # If any is popup type, show as popup
@@ -149,9 +153,9 @@ class SplashReminder:
             all_colors = [r["color"] for r in reminders]
 
             if has_popup or self.paused:
-                self.show_mini_popup(combined_message.replace("\n\n", " | "), all_colors[0])
+                self.display_queue.put(("popup", combined_message.replace("\n\n", " | "), all_colors[0]))
             else:
-                self.show_combined_splash(combined_message, all_colors)
+                self.display_queue.put(("combined", combined_message, all_colors))
 
     def show_combined_splash(self, message, colors):
         """Show a splash with multiple reminders combined."""
@@ -580,6 +584,7 @@ class SplashReminder:
     def quit_app(self):
         """Quit the application."""
         self.stop_reminders()
+        self.stop_event.set()  # Signal main loop to exit
         if self.tray_icon:
             self.tray_icon.stop()
 
@@ -628,104 +633,130 @@ class SplashReminder:
         """Show a motivational startup splash."""
         import random
 
-        # Check if startup message is enabled
-        startup_config = self.config.get("startup_message", {"enabled": True})
-        if not startup_config.get("enabled", True):
+        try:
+            # Check if startup message is enabled
+            startup_config = self.config.get("startup_message", {"enabled": True})
+            if not startup_config.get("enabled", True):
+                return
+        except Exception as e:
+            print(f"Error checking startup config: {e}")
             return
 
-        # Get messages from motivation config or use defaults
-        motivation_list = self.config.get("motivation", [])
-        if motivation_list:
-            messages = [m["message"] for m in motivation_list]
-        else:
-            messages = [
-                "Rise and grind, you magnificent bastard!\nToday is YOUR day to crush it.",
-                "Welcome back, legend.\nTime to make sh*t happen.",
-                "Another day, another chance\nto be absolutely unstoppable.",
-                "Coffee? Check. Attitude? Fierce.\nLet's f*cking GO.",
-                "They said you couldn't.\nProve those bastards wrong."
-            ]
+        try:
+            # Get messages from motivation config or use defaults
+            motivation_list = self.config.get("motivation", [])
+            if motivation_list:
+                messages = [m["message"] for m in motivation_list]
+            else:
+                messages = [
+                    "Rise and grind, you magnificent bastard!\nToday is YOUR day to crush it.",
+                    "Welcome back, legend.\nTime to make sh*t happen.",
+                    "Another day, another chance\nto be absolutely unstoppable.",
+                    "Coffee? Check. Attitude? Fierce.\nLet's f*cking GO.",
+                    "They said you couldn't.\nProve those bastards wrong."
+                ]
 
-        message = random.choice(messages)
-        accent_color = startup_config.get("color", "#FFD700")
+            message = random.choice(messages)
+            accent_color = startup_config.get("color", "#FFD700")
 
-        with self.splash_lock:
-            if self.config.get("play_sound", True):
+            with self.splash_lock:
+                if self.config.get("play_sound", True):
+                    try:
+                        winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                    except:
+                        pass
+
+                bg_color = "#1a1a1a"
+                text_muted = "#888888"
+
+                splash = tk.Tk()
+                splash.attributes('-fullscreen', True)
+                splash.attributes('-topmost', True)
+                splash.configure(bg=bg_color)
+                splash.overrideredirect(True)
+
+                frame = tk.Frame(splash, bg=bg_color)
+                frame.place(relx=0.5, rely=0.5, anchor='center')
+
+                # Crown/star accent
+                accent_bar = tk.Frame(frame, bg=accent_color, height=6, width=400)
+                accent_bar.pack(pady=(0, 30))
+
+                # Greeting
+                greeting = tk.Label(
+                    frame,
+                    text="GOOD MORNING, CHAMPION",
+                    font=("Arial", 28, "bold"),
+                    fg=text_muted,
+                    bg=bg_color
+                )
+                greeting.pack(pady=(0, 20))
+
+                # Main message
+                label = tk.Label(
+                    frame,
+                    text=message,
+                    font=("Arial", 52, "bold"),
+                    fg=accent_color,
+                    bg=bg_color,
+                    justify='center'
+                )
+                label.pack(pady=20)
+
+                # Time display
+                time_label = tk.Label(
+                    frame,
+                    text=datetime.now().strftime("%A, %B %d • %H:%M"),
+                    font=("Arial", 24),
+                    fg="#ffffff",
+                    bg=bg_color
+                )
+                time_label.pack(pady=20)
+
+                # Dismiss instruction
+                dismiss_label = tk.Label(
+                    frame,
+                    text="Click anywhere to start your day",
+                    font=("Arial", 16),
+                    fg=text_muted,
+                    bg=bg_color
+                )
+                dismiss_label.pack(pady=40)
+
+                def close_splash(event=None):
+                    try:
+                        splash.destroy()
+                    except:
+                        pass
+
+                splash.bind('<Button-1>', close_splash)
+                splash.bind('<Key>', close_splash)
+                splash.focus_force()
+
+                # Auto-close after 15 seconds
+                splash.after(15000, close_splash)
+                splash.mainloop()
+        except Exception as e:
+            print(f"Error showing startup splash: {e}")
+
+    def process_display_queue(self):
+        """Process pending display requests from the main thread."""
+        try:
+            while True:
                 try:
-                    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
-                except:
-                    pass
+                    item = self.display_queue.get_nowait()
+                    display_type, message, color = item
 
-            bg_color = "#1a1a1a"
-            text_muted = "#888888"
-
-            splash = tk.Tk()
-            splash.attributes('-fullscreen', True)
-            splash.attributes('-topmost', True)
-            splash.configure(bg=bg_color)
-            splash.overrideredirect(True)
-
-            frame = tk.Frame(splash, bg=bg_color)
-            frame.place(relx=0.5, rely=0.5, anchor='center')
-
-            # Crown/star accent
-            accent_bar = tk.Frame(frame, bg=accent_color, height=6, width=400)
-            accent_bar.pack(pady=(0, 30))
-
-            # Greeting
-            greeting = tk.Label(
-                frame,
-                text="GOOD MORNING, CHAMPION",
-                font=("Arial", 28, "bold"),
-                fg=text_muted,
-                bg=bg_color
-            )
-            greeting.pack(pady=(0, 20))
-
-            # Main message
-            label = tk.Label(
-                frame,
-                text=message,
-                font=("Arial", 52, "bold"),
-                fg=accent_color,
-                bg=bg_color,
-                justify='center'
-            )
-            label.pack(pady=20)
-
-            # Time display
-            time_label = tk.Label(
-                frame,
-                text=datetime.now().strftime("%A, %B %d • %H:%M"),
-                font=("Arial", 24),
-                fg="#ffffff",
-                bg=bg_color
-            )
-            time_label.pack(pady=20)
-
-            # Dismiss instruction
-            dismiss_label = tk.Label(
-                frame,
-                text="Click anywhere to start your day",
-                font=("Arial", 16),
-                fg=text_muted,
-                bg=bg_color
-            )
-            dismiss_label.pack(pady=40)
-
-            def close_splash(event=None):
-                try:
-                    splash.destroy()
-                except:
-                    pass
-
-            splash.bind('<Button-1>', close_splash)
-            splash.bind('<Key>', close_splash)
-            splash.focus_force()
-
-            # Auto-close after 15 seconds
-            splash.after(15000, close_splash)
-            splash.mainloop()
+                    if display_type == "popup":
+                        self.show_mini_popup(message, color)
+                    elif display_type == "splash":
+                        self.show_splash_internal(message, color)
+                    elif display_type == "combined":
+                        self.show_combined_splash(message, color)
+                except queue.Empty:
+                    break
+        except Exception as e:
+            print(f"Error processing display queue: {e}")
 
     def run(self):
         """Run the system tray application."""
@@ -756,8 +787,17 @@ class SplashReminder:
         print("Running in system tray. Right-click icon for menu.")
         print("=" * 50)
 
-        # Run the tray icon (blocks)
-        self.tray_icon.run()
+        # Run tray icon in background thread
+        tray_thread = threading.Thread(target=self.tray_icon.run, daemon=True)
+        tray_thread.start()
+
+        # Main thread handles display queue (tkinter must run on main thread)
+        try:
+            while tray_thread.is_alive() and not self.stop_event.is_set():
+                self.process_display_queue()
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            self.quit_app()
 
 
 if __name__ == "__main__":
